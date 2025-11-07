@@ -16,18 +16,19 @@
 #define x5_pos 62
 #define x5_len 16
 
-const char* CREATE_TABLE_SQL = "CREATE TABLE test_data (x1 TEXT x2 NUMERIC x3 INTEGER x4 REAL x5);";
-const char* INSERT_SQL = "INSERT INTO test_data VALUES(\"______\", ____, ______, ______, \"________________\");";
+const char* CREATE_TABLE_SQL = "CREATE TABLE test_data (x1 TEXT, x2 NUMERIC, x3 INTEGER, x4 REAL, x5);";
+const char* INSERT_SQL = "INSERT INTO test_data VALUES(\'______\', ____, ______, ______, \'________________\');";
 
-int exec_insert_sql(sqlite3 *db, char *zErrMsg) {
-    char *curr_insert = malloc(strlen(INSERT_SQL));
-    memcpy(curr_insert, INSERT_SQL, strlen(INSERT_SQL));
+int exec_insert_sql(sqlite3 *db) {
     char text[x1_len];
     char blob[x5_len];
     char integer[x2_len];
     char numeric[x3_len];
     srand(time(NULL));
     sqlite3_stmt *insert_stmt;
+
+    char *curr_insert = malloc(strlen(INSERT_SQL) + 1);
+    strcpy(curr_insert, INSERT_SQL);
 
     for (int i = 0; i < x1_len; ++i) {
         text[i] = (char)((rand() % 26) + 65);
@@ -49,15 +50,15 @@ int exec_insert_sql(sqlite3 *db, char *zErrMsg) {
     memcpy(curr_insert + x4_pos, &numeric, x4_len);
     memcpy(curr_insert + x5_pos, &blob, x5_len);
 
-    int rc = sqlite3_prepare_v2(db, curr_insert, strlen(curr_insert), &insert_stmt, &zErrMsg);
+    int rc = sqlite3_prepare_v2(db, curr_insert, strlen(curr_insert), &insert_stmt, NULL);
     if(rc != SQLITE_OK){
-        fprintf(stderr, "Preparing insert stmt failed: %s\n", zErrMsg);
+        fprintf(stderr, "Preparing insert stmt failed\n");
         return 1;
     }
 
-    rc = sqlite3_step(curr_insert);
-    if(rc != SQLITE_OK){
-        fprintf(stderr, "Inserting into table failed: %s\n", zErrMsg);
+    rc = sqlite3_step(insert_stmt);
+    if(rc != SQLITE_DONE){
+        fprintf(stderr, "Inserting into table failed\n");
         return 1;
     }
     return 0;
@@ -80,23 +81,20 @@ int main(int argc, char **argv){
         return 1;
     }
 
-    rc = sqlite3_prepare_v2(db, CREATE_TABLE_SQL, strlen(CREATE_TABLE_SQL), &create_table_stmt, &zErrMsg);
+    rc = sqlite3_prepare_v2(db, CREATE_TABLE_SQL, strlen(CREATE_TABLE_SQL), &create_table_stmt, NULL);
     if(rc != SQLITE_OK){
-        fprintf(stderr, "Preparing create stmt failed: %s\n", zErrMsg);
-        sqlite3_free(zErrMsg);
+        fprintf(stderr, "Preparing create stmt failed\n");
         return 1;
     }
 
     rc = sqlite3_step(create_table_stmt);
-    if(rc != SQLITE_OK){
-        fprintf(stderr, "Creating table failed: %s\n", zErrMsg);
-        sqlite3_free(zErrMsg);
+    if(rc != SQLITE_DONE){
+        fprintf(stderr, "Creating table failed\n");
         return 1;
     }
 
     for (int i = 0; i < NR_OF_ROWS; ++i) {
-        if (exec_insert_sql(db, zErrMsg)) {
-            sqlite3_free(zErrMsg);
+        if (exec_insert_sql(db)) {
             return 1;
         }
     }
