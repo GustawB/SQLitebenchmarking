@@ -4,7 +4,7 @@
 #include <time.h>
 #include "sqlite3.h"
 
-#define NR_OF_BATCHES 1000
+#define NR_OF_BATCHES 100000
 #define TEXT_OFFSET 1
 #define NUMERIC_OFFSET 9
 #define INTEGER_OFFSET 14
@@ -12,13 +12,12 @@
 #define BLOB_OFFSET 29
 #define BLOB_END 48
 #define INSERT_SQL_BEGINNING_LEN 29
-#define BATCH_SIZE 100
+#define BATCH_SIZE 1000
 
-const char* CREATE_TABLE_SQL = "CREATE TABLE test_data (x1 TEXT, x2 NUMERIC, x3 INTEGER, x4 REAL, x5);";
-const char* INSERT_SQL_BEGINNING = "INSERT INTO test_data VALUES ";
+static const char* CREATE_TABLE_SQL = "CREATE TABLE test_data (x1 TEXT, x2 NUMERIC, x3 INTEGER, x4 REAL, x5);";
+static const char* INSERT_SQL_BEGINNING = "INSERT INTO test_data VALUES ";
 
-void fill_insert_values(char* buf) {
-    srand(time(NULL));
+static void fill_insert_values(char* buf) {
     buf[0] = '\'';
     for (int i = TEXT_OFFSET; i < NUMERIC_OFFSET - 2; ++i) {
         buf[i] = (char)((rand() % 26) + 65);
@@ -46,23 +45,20 @@ void fill_insert_values(char* buf) {
     buf[BLOB_END - 3] = '\'';
 }
 
-int exec_insert_sql(sqlite3 *db) {
+static int exec_insert_sql(sqlite3 *db, char* buffer) {
     sqlite3_stmt *insert_stmt;
     int total_query_size = INSERT_SQL_BEGINNING_LEN + BATCH_SIZE * (BLOB_END + 1) + 1;
 
-    char *curr_insert = malloc(total_query_size);
-    memcpy(curr_insert, INSERT_SQL_BEGINNING, INSERT_SQL_BEGINNING_LEN);
-
     for (int i = 0; i < BATCH_SIZE; ++i) {
-        curr_insert[INSERT_SQL_BEGINNING_LEN + i * (BLOB_END + 1)] = '(';
-        fill_insert_values(&curr_insert[INSERT_SQL_BEGINNING_LEN + i * (BLOB_END + 1) + 1]);
-        curr_insert[INSERT_SQL_BEGINNING_LEN + i * (BLOB_END + 1) + BLOB_END - 1] = ')';
-        curr_insert[INSERT_SQL_BEGINNING_LEN + i * (BLOB_END + 1) + BLOB_END] = ',';
+        buffer[INSERT_SQL_BEGINNING_LEN + i * (BLOB_END + 1)] = '(';
+        fill_insert_values(&buffer[INSERT_SQL_BEGINNING_LEN + i * (BLOB_END + 1) + 1]);
+        buffer[INSERT_SQL_BEGINNING_LEN + i * (BLOB_END + 1) + BLOB_END - 1] = ')';
+        buffer[INSERT_SQL_BEGINNING_LEN + i * (BLOB_END + 1) + BLOB_END] = ',';
     }
-    curr_insert[total_query_size - 2] = ';';
-    curr_insert[total_query_size - 1] = '\0';
+    buffer[total_query_size - 2] = ';';
+    buffer[total_query_size - 1] = '\0';
 
-    int rc = sqlite3_prepare_v2(db, curr_insert, strlen(curr_insert), &insert_stmt, NULL);
+    int rc = sqlite3_prepare_v2(db, buffer, strlen(buffer), &insert_stmt, NULL);
     if(rc != SQLITE_OK){
         fprintf(stderr, "Preparing insert stmt failed\n");
         return 1;
@@ -73,7 +69,7 @@ int exec_insert_sql(sqlite3 *db) {
         fprintf(stderr, "Inserting into table failed\n");
         return 1;
     }
-    free(curr_insert);
+    sqlite3_finalize(insert_stmt);
     return 0;
 }
 
@@ -82,6 +78,7 @@ int main(int argc, char **argv){
     char *zErrMsg = 0;
     int rc;
     sqlite3_stmt *create_table_stmt;
+    srand(time(NULL));
     
     if(argc != 2){
         fprintf(stderr, "Usage: %s DATABASE_FILE\n", argv[0]);
@@ -105,13 +102,20 @@ int main(int argc, char **argv){
         fprintf(stderr, "Creating table failed\n");
         return 1;
     }
+    sqlite3_finalize(create_table_stmt);
+
+    char *buffer = malloc(INSERT_SQL_BEGINNING_LEN + BATCH_SIZE * (BLOB_END + 1) + 1);
+    memcpy(buffer, INSERT_SQL_BEGINNING, INSERT_SQL_BEGINNING_LEN);
 
     for (int i = 0; i < NR_OF_BATCHES; ++i) {
         printf("%d\n", i);
-        if (exec_insert_sql(db)) {
+        if (exec_insert_sql(db, buffer)) {
+            free(buffer);
             return 1;
         }
     }
+
+    free(buffer);
     sqlite3_close(db);
     return 0;
 }
