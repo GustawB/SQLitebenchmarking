@@ -4,7 +4,7 @@
 #include <time.h>
 #include "sqlite3.h"
 
-#define NR_OF_BATCHES 100000
+#define NR_OF_BATCHES 1000
 #define TEXT_OFFSET 1
 #define NUMERIC_OFFSET 9
 #define INTEGER_OFFSET 14
